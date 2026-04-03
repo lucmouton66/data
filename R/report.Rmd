@@ -1,0 +1,186 @@
+---
+title: "Rapport — Profil Accélération-Vitesse (AS)"
+subtitle: "Analyse GPS Rugby — Catapult OpenField"
+date: "`r format(Sys.Date(), '%d/%m/%Y')`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    latex_engine: xelatex
+    fig_width: 7
+    fig_height: 4.5
+params:
+  resultats:     NULL
+  plots:         NULL
+  qualite_gps:   NULL
+  stats_groupe:  NULL
+  reserve:       NULL
+  fiabilite:     NULL
+  nom_session:   "Session"
+  nom_joueur:    "Joueur"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center",
+  dpi     = 150
+)
+
+library(ggplot2)
+library(knitr)
+```
+
+# Informations générales
+
+**Session :** `r params$nom_session`  
+**Joueur / Groupe :** `r params$nom_joueur`  
+**Date du rapport :** `r format(Sys.Date(), '%d/%m/%Y')`
+
+---
+
+# Contrôle qualité GPS
+
+```{r qualite-gps, results='asis'}
+qgps <- params$qualite_gps
+if (!is.null(qgps)) {
+  cat(sprintf(
+    "- **HDOP moyen :** %.3f\n- **#Sats moyen :** %.1f\n- **Qualité :** %s\n",
+    qgps$hdop_moyen, qgps$sats_moyen, qgps$texte_qualite
+  ))
+} else {
+  cat("*Données de qualité GPS non disponibles.*\n")
+}
+```
+
+---
+
+# Profil Accélération-Vitesse (AS)
+
+## Graphique principal
+
+```{r plot-as, fig.cap="Profil AS individuel avec droites de régression quantile"}
+if (!is.null(params$plots$as)) {
+  print(params$plots$as)
+} else {
+  plot(0, 0, type = "n",
+       main = "Profil AS non disponible",
+       xlab = "Vitesse (m/s)", ylab = "Accélération (m/s²)")
+}
+```
+
+## Paramètres AS
+
+```{r params-as, results='asis'}
+res <- params$resultats
+if (!is.null(res)) {
+  df_tab <- data.frame(
+    Paramètre  = c("A0 (m/s²)", "S0 (m/s)", "Pente AS", "r²"),
+    Valeur     = c(
+      sprintf("%.3f ± %.3f", res$A0_moyen, res$A0_sd),
+      sprintf("%.3f ± %.3f", res$S0_moyen, res$S0_sd),
+      sprintf("%.3f ± %.3f", res$ASslope_moyen, res$ASslope_sd),
+      sprintf("%.3f",        res$r2)
+    ),
+    Validation = c("", "", "", ifelse(res$r2 > 0.81, "✓ r² > 0.81", "✗ r² ≤ 0.81"))
+  )
+  knitr::kable(df_tab,
+               caption = "Paramètres du profil AS (moyenne ± écart-type sur 19 quantiles)",
+               align = c("l", "r", "c"))
+} else {
+  cat("*Résultats AS non disponibles.*\n")
+}
+```
+
+---
+
+# Statistiques de groupe
+
+```{r stats-groupe}
+sg <- params$stats_groupe
+if (!is.null(sg) && nrow(sg) > 0) {
+  knitr::kable(sg,
+               caption = "Statistiques descriptives par groupe",
+               digits  = 3)
+} else {
+  cat("*Statistiques de groupe non disponibles.*\n")
+}
+```
+
+---
+
+# Réserve compétitive
+
+```{r reserve}
+rv <- params$reserve
+if (!is.null(rv) && nrow(rv) > 0) {
+  knitr::kable(rv,
+               caption = "Réserve compétitive par rapport au profil de référence",
+               digits  = 2)
+} else {
+  cat("*Données de réserve compétitive non disponibles.*\n")
+}
+```
+
+```{r plot-reserve, fig.cap="Réserve compétitive (%)"}
+if (!is.null(params$plots$reserve)) {
+  print(params$plots$reserve)
+}
+```
+
+---
+
+# Fiabilité des mesures
+
+```{r fiabilite, results='asis'}
+fb <- params$fiabilite
+if (!is.null(fb) && !is.na(fb$icc)) {
+  cat(sprintf(
+    "- **ICC (IC 95%%) :** %.3f [%.3f – %.3f]\n- **SEM :** %.3f\n- **CV%% :** %.2f%%\n- **Sujets :** %d  **Sessions :** %d\n",
+    fb$icc, fb$icc_lb, fb$icc_ub,
+    fb$sem, fb$cv,
+    fb$n_sujets, fb$n_sessions
+  ))
+} else {
+  cat("*Données de fiabilité non disponibles.*\n")
+}
+```
+
+---
+
+# Interprétation et recommandations
+
+```{r interpretation, results='asis'}
+res <- params$resultats
+rv  <- params$reserve
+
+if (!is.null(res)) {
+  valid <- if (!is.na(res$r2) && res$r2 > 0.81) "valide (r² > 0.81)" else "à vérifier (r² ≤ 0.81)"
+  cat(sprintf(
+    "Le profil AS présente un ajustement **%s**.\n\n",
+    valid
+  ))
+  cat(sprintf(
+    "- Accélération maximale théorique (A0) : **%.2f m/s²**\n",
+    res$A0_moyen
+  ))
+  cat(sprintf(
+    "- Vitesse maximale théorique (S0) : **%.2f m/s**\n",
+    res$S0_moyen
+  ))
+}
+
+if (!is.null(rv) && nrow(rv) > 0 && "interpretation" %in% names(rv)) {
+  cat("\n**Réserve compétitive :**\n\n")
+  for (i in seq_len(nrow(rv))) {
+    cat(sprintf("- %s : %s\n", rv$joueur[i], rv$interpretation[i]))
+  }
+}
+```
+
+---
+
+*Rapport généré automatiquement par l'application Rugby GPS AS Profiler.*
